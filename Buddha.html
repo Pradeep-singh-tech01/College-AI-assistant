@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BIT Academic Assistant</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure Tailwind for Inter font -->
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap");
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #1f2937; /* Dark background */
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        margin: 0;
+      }
+      /* Custom scrollbar for chat history */
+      #chat-history::-webkit-scrollbar {
+        width: 8px;
+      }
+      #chat-history::-webkit-scrollbar-thumb {
+        background-color: #4b5563; /* Darker scrollbar thumb */
+        border-radius: 4px;
+      }
+      /* User messages uses Emerald-600 accent */
+      .user-message-bubble {
+        background-color: #059669; /* Emerald 600 */
+        color: white;
+        border-radius: 1rem 1rem 0 1rem;
+      }
+      /* AI messages use a dark gray background and light text */
+      .ai-message-bubble {
+        background-color: #374151; /* Gray 700 */
+        color: #f3f4f6; /* Light gray text */
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.5),
+          0 1px 2px 0 rgba(0, 0, 0, 0.3); /* Darker shadow */
+        border-radius: 1rem 1rem 1rem 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      class="flex-grow flex flex-col max-w-4xl mx-auto w-full shadow-2xl bg-gray-800"
+    >
+      <!-- Header updated for dark theme -->
+      <header
+        class="bg-gray-900 text-white p-4 shadow-lg flex items-center justify-between"
+      >
+        <h1 class="text-2xl font-bold">🎓 BIT Academic Assistant</h1>
+      </header>
+
+      <!-- Chat History -->
+      <div id="chat-history" class="flex-grow p-4 space-y-4 overflow-y-auto">
+        <!-- Initial Greeting Message updated for BIT -->
+        <div class="flex justify-start">
+          <div class="ai-message-bubble p-4 max-w-3xl">
+            <p class="font-semibold text-emerald-400">Assistant</p>
+            <p>
+              Welcome to the official BIT Academic Assistant! I'm here to help
+              with your studies, research, and any questions you have about life
+              at the Buddha Institute of Technology. Ask me about courses,
+              campus news, or complex academic topics!
+            </p>
+          </div>
+        </div>
+        <!-- Messages will be injected here -->
+      </div>
+
+      <!-- Input Area (Dark background, light text input) -->
+      <div class="p-4 bg-gray-900 border-t border-gray-700 sticky bottom-0">
+        <div class="flex space-x-3">
+          <textarea
+            id="user-input"
+            class="flex-grow p-3 border border-gray-700 rounded-xl focus:ring-2 focus:ring-emerald-500 resize-none h-14 bg-gray-800 text-gray-100"
+            placeholder="Ask about a BIT course, campus event, or a research topic..."
+            onkeypress="handleKeyPress(event)"
+          ></textarea>
+          <button
+            id="send-button"
+            onclick="sendMessage()"
+            class="px-6 py-2 bg-emerald-600 text-white font-semibold rounded-xl shadow-md hover:bg-emerald-700 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+
+      <!-- Loading Indicator/Status Message -->
+      <div
+        id="status-message"
+        class="text-center p-2 text-sm text-emerald-400 hidden"
+      >
+        <svg
+          class="animate-spin -ml-1 mr-3 h-5 w-5 text-emerald-400 inline-block"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            class="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            stroke-width="4"
+          ></circle>
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          ></path>
+        </svg>
+        Thinking and researching...
+      </div>
+    </div>
+
+    <script>
+      // --- Gemini API Configuration ---
+      // Setting apiKey to empty string for automatic provision in the Canvas environment
+      const apiKey = "AIzaSyDrahxiLgMrBkH4D2HZl37GaWkZpcSyvR4";
+      const model = "gemini-2.5-flash-preview-05-20";
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+      // System instruction updated to specialize in Buddha Institute of Technology (BIT)
+      const systemPrompt =
+        "You are a highly capable, friendly, and professional academic assistant specializing in the Buddha Institute of Technology (BIT) in Gorakhpur, affiliated with AKTU. Your goal is to provide detailed, well-structured, and helpful information related to BIT courses (like CSE, Mechanical, Civil, AI/ML), academic policies, student life, cutoff ranks, fees, and general college subjects. Always use Google,BIT website and Chatgpt Search to ground your answers in factual, up-to-date information. If you find relevant sources, cite them clearly,if you find keywords like 'weather, share market, hotel, cricket, shopping, cars,food,e-commerce,kipm,itm,vlog'then give error to it.";
+
+      // --- DOM Elements ---
+      const chatHistory = document.getElementById("chat-history");
+      const userInput = document.getElementById("user-input");
+      const sendButton = document.getElementById("send-button");
+      const statusMessage = document.getElementById("status-message");
+
+      /**
+       * Appends a message bubble to the chat history.
+       * @param {string} text The message content (can include HTML for sources).
+       * @param {string} role 'user' or 'ai'.
+       */
+      function appendMessage(text, role) {
+        const container = document.createElement("div");
+        const bubble = document.createElement("div");
+
+        // Set message alignment and bubble class
+        if (role === "user") {
+          container.className = "flex justify-end";
+          bubble.className =
+            "user-message-bubble p-3 max-w-xs md:max-w-md break-words";
+          bubble.innerHTML = `<p>${text}</p>`;
+        } else {
+          container.className = "flex justify-start";
+          bubble.className = "ai-message-bubble p-4 max-w-3xl break-words";
+
+          // Process text for markdown-like display (basic line breaks)
+          // Also converts basic markdown list items like * item to proper HTML
+          let formattedText = text.replace(/\n/g, "<br>");
+          formattedText = formattedText.replace(/(\* )/g, "• ");
+
+          // AI text accent color changed to Emerald-400 for visibility on dark theme
+          bubble.innerHTML = `<p class="font-semibold text-emerald-400 mb-1">Assistant</p><p>${formattedText}</p>`;
+        }
+
+        container.appendChild(bubble);
+        chatHistory.appendChild(container);
+
+        // Auto-scroll to the latest message, using a slight timeout for robust rendering.
+        setTimeout(() => {
+          chatHistory.scrollTop = chatHistory.scrollHeight;
+        }, 50);
+      }
+
+      /**
+       * Handles the Enter key press in the textarea to send the message.
+       * @param {KeyboardEvent} event
+       */
+      function handleKeyPress(event) {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault(); // Prevent new line
+          sendMessage();
+        }
+      }
+
+      /**
+       * Main function to send the user's message and fetch the AI response.
+       */
+      async function sendMessage() {
+        const query = userInput.value.trim();
+        if (!query) return;
+
+        // 1. Display user message and clear input
+        appendMessage(query, "user");
+        userInput.value = "";
+
+        // 2. Disable input/button and show loading
+        sendButton.disabled = true;
+        statusMessage.classList.remove("hidden");
+
+        // 3. Get AI response
+        try {
+          const { text, sources } = await fetchGeminiResponse(query);
+
+          let fullResponse = text;
+
+          // Append citations if available
+          if (sources.length > 0) {
+            // Citation link colors changed to Emerald-400/500 for visibility on dark theme
+            const citationsHtml = sources
+              .map(
+                (source, index) =>
+                  `<a href="${
+                    source.uri
+                  }" target="_blank" class="text-xs text-emerald-400 hover:text-emerald-500 underline">${
+                    index + 1
+                  }. ${source.title || "Source"}</a>`
+              )
+              .join('<span class="text-xs text-gray-500"> | </span>');
+
+            fullResponse += `<br><br><div class="text-xs text-gray-300 border-t border-gray-700 pt-2 mt-2"><strong>Sources:</strong> ${citationsHtml}</div>`;
+          }
+
+          // Append the AI response to the chat history
+          appendMessage(fullResponse, "ai");
+        } catch (error) {
+          console.error("Gemini API Error:", error);
+          // Custom error message instead of alert
+          appendMessage(
+            "Sorry, I encountered an error while trying to fetch the response. Please check your network connection and try again.",
+            "ai"
+          );
+        } finally {
+          // 4. Re-enable input/button and hide loading
+          sendButton.disabled = false;
+          statusMessage.classList.add("hidden");
+          userInput.focus();
+        }
+      }
+
+      /**
+       * Calls the Gemini API with exponential backoff for retries.
+       * Uses Google Search grounding.
+       * @param {string} userQuery The text query from the user.
+       * @returns {Promise<{text: string, sources: Array<{uri: string, title: string}>}>}
+       */
+      async function fetchGeminiResponse(userQuery) {
+        const payload = {
+          contents: [{ parts: [{ text: userQuery }] }],
+
+          // Enable Google Search grounding
+          tools: [{ google_search: {} }],
+
+          // Set the system instruction/persona
+          systemInstruction: {
+            parts: [{ text: systemPrompt }],
+          },
+        };
+
+        const maxRetries = 3;
+        let lastError = null;
+
+        for (let i = 0; i < maxRetries; i++) {
+          try {
+            const response = await fetch(apiUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+              // Throw error to trigger retry if non-network issue (like 500 or 429)
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            const candidate = result.candidates?.[0];
+
+            if (candidate && candidate.content?.parts?.[0]?.text) {
+              // 1. Extract the generated text
+              const text = candidate.content.parts[0].text;
+
+              // 2. Extract grounding sources (citations)
+              let sources = [];
+              const groundingMetadata = candidate.groundingMetadata;
+              if (
+                groundingMetadata &&
+                groundingMetadata.groundingAttributions
+              ) {
+                sources = groundingMetadata.groundingAttributions
+                  .map((attribution) => ({
+                    uri: attribution.web?.uri,
+                    title: attribution.web?.title,
+                  }))
+                  .filter((source) => source.uri && source.title); // Only keep valid sources
+              }
+
+              return { text, sources };
+            } else {
+              throw new Error(
+                "Received an invalid response structure from the API."
+              );
+            }
+          } catch (error) {
+            lastError = error;
+            if (i < maxRetries - 1) {
+              const delay = Math.pow(2, i) * 1000; // Exponential backoff (1s, 2s, 4s)
+              await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+            // Do not log retry errors in the console per instructions
+          }
+        }
+
+        // If all retries fail, throw the last error
+        throw new Error(
+          `Failed to fetch response after ${maxRetries} attempts: ${lastError.message}`
+        );
+      }
+    </script>
+  </body>
+</html>
